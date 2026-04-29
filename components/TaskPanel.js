@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { FONT, RED, GRAY } from '@/lib/constants'
 
 /**
@@ -23,6 +24,7 @@ export default function TaskPanel({ task, onSave, onClose }) {
     deadline:    task?.deadline
       ? task.deadline.slice(0, 10)
       : new Date().toISOString().slice(0, 10),
+    dueTime:     task?.deadline?.slice(11, 16) || '09:00',
   })
   const [saving, setSaving] = useState(false)
 
@@ -58,8 +60,7 @@ export default function TaskPanel({ task, onSave, onClose }) {
     if (!form.title.trim()) return
     setSaving(true)
     const duration = parseInt(form.hours || 0) * 60 + parseInt(form.minutes || 0)
-    const time     = task?.deadline?.slice(11, 16) || '09:00'
-    const deadline = `${form.deadline}T${time}:00`
+    const deadline = `${form.deadline}T${form.dueTime}:00`
 
     setTimeout(() => {
       onSave({
@@ -81,7 +82,7 @@ export default function TaskPanel({ task, onSave, onClose }) {
       ? '#E8781A'
       : '#D4A017'
 
-  return (
+  return createPortal(
     <div
       onClick={onClose}
       style={{
@@ -115,7 +116,8 @@ export default function TaskPanel({ task, onSave, onClose }) {
           }
           input[type=number]::-webkit-inner-spin-button,
           input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; }
-          input[type=date]::-webkit-calendar-picker-indicator { opacity: 0.5; cursor: pointer; }
+          input[type=date]::-webkit-calendar-picker-indicator,
+          input[type=time]::-webkit-calendar-picker-indicator { opacity: 0.5; cursor: pointer; }
         `}</style>
 
         {/* Drag handle */}
@@ -168,18 +170,22 @@ export default function TaskPanel({ task, onSave, onClose }) {
           />
         </div>
 
-        {/* Deadline + Priority */}
+        {/* Deadline + Due Time + Priority */}
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
-            gap: 12,
+            gridTemplateColumns: '1fr 1fr 1fr',
+            gap: 10,
             marginBottom: 16,
           }}
         >
           <div>
-            <label style={labelStyle}>Deadline</label>
-            <input type="date" style={{ ...inputStyle, fontSize: 13 }} {...f('deadline')} />
+            <label style={labelStyle}>Date</label>
+            <input type="date" style={{ ...inputStyle, fontSize: 12, padding: '12px 10px' }} {...f('deadline')} />
+          </div>
+          <div>
+            <label style={labelStyle}>Time</label>
+            <input type="time" style={{ ...inputStyle, fontSize: 12, padding: '12px 10px' }} {...f('dueTime')} />
           </div>
           <div>
             <label style={labelStyle}>Priority</label>
@@ -189,6 +195,8 @@ export default function TaskPanel({ task, onSave, onClose }) {
                 appearance: 'none',
                 cursor: 'pointer',
                 fontWeight: 700,
+                fontSize: 13,
+                padding: '12px 10px',
                 color: priorityColor,
               }}
               {...f('priority')}
@@ -266,6 +274,7 @@ export default function TaskPanel({ task, onSave, onClose }) {
           {saving ? '✓ Saved!' : task ? 'Save Changes' : "Let's get to work"}
         </button>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

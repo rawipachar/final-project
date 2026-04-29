@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { LIGHT_BLUE, RED } from '@/lib/constants'
-import { formatDuration, formatDeadlineFull } from '@/lib/utils'
+import { formatDuration, formatDeadlineFull, formatTime } from '@/lib/utils'
 import Badge    from '@/components/Badge'
 import Checkbox from '@/components/Checkbox'
 import EmojiIcon from '@/components/EmojiIcon'
@@ -83,6 +83,12 @@ export default function TaskListCard({ task, isExpanded, onToggle, onEdit }) {
               {formatDuration(task.duration)}
             </span>
           </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
+            <span style={{ fontSize: 12, color: checked ? '#bbb' : '#888' }}>
+              📅 {formatDeadlineFull(task.deadline)} · {formatTime(task.deadline)}
+            </span>
+          </div>
         </div>
 
         {/* Chevron rotates when expanded */}
@@ -125,7 +131,7 @@ export default function TaskListCard({ task, isExpanded, onToggle, onEdit }) {
               }}
             >
               <span style={{ fontSize: 13, fontWeight: 700, color: RED, lineHeight: 1.4 }}>
-                Deadline is due on {formatDeadlineFull(task.deadline)}
+                Due {formatDeadlineFull(task.deadline)} at {formatTime(task.deadline)}
               </span>
 
               <button

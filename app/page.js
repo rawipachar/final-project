@@ -3,73 +3,104 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 
-// ─── External components (existing) ───────────────────────────
-import DateScroller    from '@/components/DateScroller'
-import CountdownCircle from '@/components/CountdownCircle'
+import DateScroller      from '@/components/DateScroller'
+import CountdownCircle   from '@/components/CountdownCircle'
 import FloatingAddButton from '@/components/FloatingAddButton'
+import HomeCard          from '@/components/HomeCard'
+import TaskListCard      from '@/components/TaskListCard'
+import DetailView        from '@/components/DetailView'
+import TaskPanel         from '@/components/TaskPanel'
 
-// ─── New shared components ─────────────────────────────────────
-import HomeCard      from '@/components/HomeCard'
-import TaskListCard  from '@/components/TaskListCard'
-import DetailView    from '@/components/DetailView'
-import TaskPanel     from '@/components/TaskPanel'
-
-// ─── Constants / utils / store ────────────────────────────────
 import { FONT, RED, LIGHT_BLUE, GRAY, MONTH_NAMES, PRIORITY_WEIGHT } from '@/lib/constants'
 import { todayMidnight, dateLabel, formatDuration, makeDueDate }      from '@/lib/utils'
-import { globalTasks as _seed, nextId as _nextId }                    from '@/lib/taskStore'
-
-// Module-level store (survives client navigations within the session)
-let globalTasks = _seed
-let nextId      = _nextId
+import { globalTasks, getNextId }                                      from '@/lib/taskStore'
 
 // ═══════════════════════════════════════════════════════════════
 // PAGE 1 — HOME
 // ═══════════════════════════════════════════════════════════════
 
-function HomePage({ tasks }) {
+function HomePage({ tasks, onTasksChange }) {
   const router  = useRouter()
   const today   = new Date()
+
   const [selDate, setSelDate] = useState({
     day:     today.getDate(),
     dayName: ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][today.getDay()],
     date:    today,
     key:     today.toDateString(),
   })
-  const [mounted, setMounted] = useState(false)
+  const [mounted,     setMounted]     = useState(false)
+  const [expandedId,  setExpandedId]  = useState(null)
+  const [editingTask, setEditingTask] = useState(null)
+
   useEffect(() => { setMounted(true) }, [])
 
-  // Derive urgent task (today + high priority) and upcoming list
-  const todayMid   = todayMidnight()
-  const urgentTask = tasks.find(t => {
+  // Determine if selected date is today
+  const todayMid = todayMidnight()
+  const selMid   = new Date(selDate.date)
+  selMid.setHours(0, 0, 0, 0)
+  const isToday = selMid.getTime() === todayMid.getTime()
+
+  // Filter tasks whose deadline matches the selected date
+  const tasksForDate = tasks.filter(t => {
     const d = new Date(t.deadline); d.setHours(0,0,0,0)
-    return d.getTime() === todayMid.getTime() &&
-           (t.priority === 'high' || t.priority === 'highest')
+    return d.getTime() === selMid.getTime()
   })
-  const upcomingTasks = tasks.filter(t => t.id !== urgentTask?.id)
+
+  // Urgent task: first high/highest on today only
+  const urgentTask = isToday
+    ? tasksForDate.find(t => t.priority === 'high' || t.priority === 'highest')
+    : null
+
+  // Upcoming: all date-filtered tasks except the urgent one
+  const upcomingTasks = tasksForDate.filter(t => t.id !== urgentTask?.id)
 
   const countdown = urgentTask
     ? { dueDate: new Date(urgentTask.deadline), totalDuration: urgentTask.duration }
     : { dueDate: makeDueDate(120), totalDuration: 120 }
 
-  // HomeCard expects duration as a formatted string
-  const toCardShape = (t) => ({
-    ...t,
-    priority: t.priority === 'high' ? 'highest' : t.priority,
-    duration: formatDuration(t.duration),
-  })
+  // Format duration for display inside HomeCard
+  const toCardShape = (t) => ({ ...t, duration: formatDuration(t.duration) })
+
+  const handleCardToggle = (id) => {
+    setExpandedId(prev => prev === id ? null : id)
+  }
+
+  const handleDateChange = (d) => {
+    setSelDate(d)
+    setExpandedId(null)
+  }
+
+  const handleSave = (updated) => {
+    if (onTasksChange) {
+      const next = updated.id
+        ? tasks.map(t => t.id === updated.id ? updated : t)
+        : [{ ...updated, id: getNextId() }, ...tasks]
+      onTasksChange(next)
+    }
+    setEditingTask(null)
+  }
+
+  const headingLabel = dateLabel(selDate.date.toISOString())
 
   return (
-    <div style={{ fontFamily: FONT, height: '100%', overflowY: 'auto', paddingBottom: 120 }}>
-      {/* ── Header ── */}
-      <div style={{ padding: '52px 24px 8px' }}>
+    <div style={{
+      fontFamily: FONT,
+      height: '100%',
+      overflowY: 'auto',
+      overflowX: 'hidden',
+      paddingBottom: 120,
+      boxSizing: 'border-box',
+    }}>
+      {/* Header */}
+      <div style={{ padding: '52px 24px 8px', boxSizing: 'border-box' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <p style={{ fontSize: 13, color: '#999', fontWeight: 400, margin: 0 }}>
               {MONTH_NAMES[selDate.date.getMonth()]} {selDate.date.getFullYear()}
             </p>
-            <h1 style={{ fontSize: 28, fontWeight: 700, color: '#1a1a1a', margin: 0, lineHeight: 1.1 }}>
-              Today
+            <h1 style={{ fontSize: 28, fontWeight: 800, color: '#1a1a1a', margin: 0, lineHeight: 1.1 }}>
+              {headingLabel}
             </h1>
           </div>
           <div style={{
@@ -80,57 +111,81 @@ function HomePage({ tasks }) {
         </div>
       </div>
 
-      <DateScroller selectedDate={selDate} onDateChange={setSelDate} />
+      <DateScroller selectedDate={selDate} onDateChange={handleDateChange} />
       <div style={{ height: 1, backgroundColor: '#F0F0F0', margin: '0 24px' }} />
 
-      {/* ── Urgent section ── */}
-      <div style={{ padding: '24px 24px 0' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <h2 style={{ fontSize: 24, fontWeight: 700, color: '#1a1a1a', margin: 0 }}>Urgent</h2>
-          <span style={{
-            width: 22, height: 22, borderRadius: '50%',
-            backgroundColor: RED, color: '#fff',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 11, fontWeight: 700,
-          }}>1</span>
-        </div>
-
-        {mounted && (
-          <CountdownCircle
-            dueDate={countdown.dueDate}
-            totalDuration={countdown.totalDuration}
-          />
-        )}
-
-        {urgentTask && (
-          <div style={{ marginTop: 16 }}>
-            <HomeCard task={toCardShape(urgentTask)} variant="urgent" />
+      {/* Urgent section — only shown on Today */}
+      {isToday && (
+        <div style={{ padding: '24px 24px 0', boxSizing: 'border-box' }}>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
+            <h2 style={{ fontSize: 24, fontWeight: 700, color: '#1a1a1a', margin: 0 }}>Urgent</h2>
           </div>
-        )}
-      </div>
 
-      {/* ── Upcoming section ── */}
-      <div style={{ padding: '32px 24px 0' }}>
+          {mounted && (
+            <CountdownCircle
+              dueDate={countdown.dueDate}
+              totalDuration={countdown.totalDuration}
+            />
+          )}
+
+          {urgentTask && (
+            <div style={{ marginTop: 16 }}>
+              <HomeCard
+                task={toCardShape(urgentTask)}
+                variant="urgent"
+                isExpanded={expandedId === urgentTask.id}
+                onToggle={() => handleCardToggle(urgentTask.id)}
+                onEdit={setEditingTask}
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Upcoming section */}
+      <div style={{ padding: '32px 24px 0', boxSizing: 'border-box' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <h2 style={{ fontSize: 24, fontWeight: 700, color: '#1a1a1a', margin: 0 }}>Up coming</h2>
-          <span style={{
-            width: 22, height: 22, borderRadius: '50%',
-            backgroundColor: GRAY, color: '#888',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 11, fontWeight: 700,
-          }}>{upcomingTasks.length}</span>
+          {upcomingTasks.length > 0 && (
+            <span style={{
+              width: 22, height: 22, borderRadius: '50%',
+              backgroundColor: GRAY, color: '#888',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 11, fontWeight: 700,
+            }}>
+              {upcomingTasks.length}
+            </span>
+          )}
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {upcomingTasks.slice(0, 4).map(t => (
-            <HomeCard key={t.id} task={toCardShape(t)} variant="upcoming" />
-          ))}
-        </div>
+        {upcomingTasks.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '32px 0', color: '#bbb' }}>
+            <p style={{ fontSize: 14, margin: 0, fontWeight: 500 }}>No tasks for this day</p>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {upcomingTasks.map(t => (
+              <HomeCard
+                key={t.id}
+                task={toCardShape(t)}
+                variant="upcoming"
+                isExpanded={expandedId === t.id}
+                onToggle={() => handleCardToggle(t.id)}
+                onEdit={setEditingTask}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       <div style={{ paddingTop: 32 }}>
         <FloatingAddButton onClick={() => router.push('/add-task')} />
       </div>
+
+      {/* TaskPanel for inline edits from Home */}
+      {editingTask && (
+        <TaskPanel task={editingTask} onSave={handleSave} onClose={() => setEditingTask(null)} />
+      )}
     </div>
   )
 }
@@ -140,31 +195,27 @@ function HomePage({ tasks }) {
 // ═══════════════════════════════════════════════════════════════
 
 function TaskListPage({ tasks, onTasksChange }) {
-  const [filter,   setFilter]   = useState('all')   // 'all' | 'high' | 'recommend'
-  const [expanded, setExpanded] = useState(null)    // id of expanded card
-  const [detail,   setDetail]   = useState(null)    // task shown in DetailView
-  const [editing,  setEditing]  = useState(null)    // task being edited in TaskPanel
-  const [addNew,   setAddNew]   = useState(false)   // TaskPanel in "new" mode
+  const [filter,   setFilter]   = useState('all')
+  const [expanded, setExpanded] = useState(null)
+  const [detail,   setDetail]   = useState(null)
+  const [editing,  setEditing]  = useState(null)
+  const [addNew,   setAddNew]   = useState(false)
 
-  // ── Tap logic: 1st tap = expand, 2nd tap = full detail ──
   const handleCardTap = (task) => {
     if (expanded === task.id) setDetail(task)
     else setExpanded(task.id)
   }
 
-  // ── Save handler (edit or new) ──
   const handleSave = (updated) => {
     const next = updated.id
-      ? tasks.map(t => t.id === updated.id ? updated : t)   // edit
-      : [{ ...updated, id: nextId++ }, ...tasks]             // new
+      ? tasks.map(t => t.id === updated.id ? updated : t)
+      : [{ ...updated, id: getNextId() }, ...tasks]
     onTasksChange(next)
-    globalTasks = next
     setEditing(null)
     setAddNew(false)
     if (detail?.id === updated.id) setDetail(updated)
   }
 
-  // ── Filter & sort ──
   const getFiltered = () => {
     if (filter === 'high') {
       return [...tasks]
@@ -172,25 +223,26 @@ function TaskListPage({ tasks, onTasksChange }) {
         .sort((a, b) => new Date(a.deadline) - new Date(b.deadline))
     }
     if (filter === 'recommend') {
+      const now = Date.now()
       return [...tasks].sort((a, b) => {
-        const sA = (PRIORITY_WEIGHT[a.priority] || 1) * (a.duration || 1)
-        const sB = (PRIORITY_WEIGHT[b.priority] || 1) * (b.duration || 1)
+        const hoursA = Math.max(1, (new Date(a.deadline) - now) / 3_600_000)
+        const hoursB = Math.max(1, (new Date(b.deadline) - now) / 3_600_000)
+        const sA = (PRIORITY_WEIGHT[a.priority] || 1) * (a.duration || 1) / hoursA
+        const sB = (PRIORITY_WEIGHT[b.priority] || 1) * (b.duration || 1) / hoursB
         return sB - sA
       })
     }
     return [...tasks].sort((a, b) => new Date(a.deadline) - new Date(b.deadline))
   }
 
-  // ── Group by date label (All task view only) ──
   const getGrouped = (sorted) => {
     if (filter !== 'all') return null
     const map = {}
     sorted.forEach(t => {
-      const label = dateLabel(t.deadline)
-      if (!map[label]) map[label] = []
-      map[label].push(t)
+      const lbl = dateLabel(t.deadline)
+      if (!map[lbl]) map[lbl] = []
+      map[lbl].push(t)
     })
-    // Ensure Today and Tomorrow appear first
     const priority = ['Today', 'Tomorrow']
     const result   = []
     const seen     = new Set()
@@ -239,13 +291,14 @@ function TaskListPage({ tasks, onTasksChange }) {
   )
 
   return (
-    <div style={{ fontFamily: FONT, height: '100%', overflowY: 'auto', paddingBottom: 120 }}>
-      {/* ── Header ── */}
+    <div style={{ fontFamily: FONT, height: '100%', overflowY: 'auto', overflowX: 'hidden', paddingBottom: 120 }}>
+      {/* Header */}
       <div style={{
         padding: '52px 24px 16px',
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        boxSizing: 'border-box',
       }}>
-        <h1 style={{ fontSize: 26, fontWeight: 700, color: '#1a1a1a', margin: 0 }}>Task</h1>
+        <h1 style={{ fontSize: 28, fontWeight: 800, color: '#1a1a1a', margin: 0 }}>Task</h1>
         <button
           onClick={() => setAddNew(true)}
           style={{
@@ -257,34 +310,35 @@ function TaskListPage({ tasks, onTasksChange }) {
         >+</button>
       </div>
 
-      {/* ── Filter pills ── */}
+      {/* Filter pills */}
       <div
         style={{ display: 'flex', gap: 10, padding: '0 24px 20px', overflowX: 'auto' }}
         className="scrollbar-hide"
       >
         <FilterBtn id="all"       label="All task" />
         <FilterBtn id="high"      label="High risk" />
-        <FilterBtn id="recommend" label="recommendations" />
+        <FilterBtn id="recommend" label="Recommendations" />
       </div>
 
-      {/* ── Recommendation info banner ── */}
+      {/* Recommendation banner */}
       {filter === 'recommend' && (
         <div style={{
           margin: '0 20px 16px', padding: '11px 16px', borderRadius: 14,
           backgroundColor: '#FFFBEA', border: '1px solid #F5DC70',
+          boxSizing: 'border-box',
         }}>
           <p style={{ margin: 0, fontSize: 13, color: '#7A6000', fontWeight: 500 }}>
-            ✨ Sorted by impact — tackle high priority, long tasks first.
+            ✨ Sorted by urgency — high priority, long tasks due soon come first.
           </p>
         </div>
       )}
 
-      {/* ── Task list ── */}
-      <div style={{ padding: '0 20px' }}>
+      {/* Task list */}
+      <div style={{ padding: '0 20px', boxSizing: 'border-box' }}>
         {filter === 'all' && grouped ? (
           grouped.map(g => (
             <div key={g.label} style={{ marginBottom: 28 }}>
-              <h2 style={{ fontSize: 28, fontWeight: 800, color: '#1a1a1a', margin: '0 0 14px 2px' }}>
+              <h2 style={{ fontSize: 24, fontWeight: 700, color: '#1a1a1a', margin: '0 0 14px 2px' }}>
                 {g.label}
               </h2>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -306,8 +360,8 @@ function TaskListPage({ tasks, onTasksChange }) {
         )}
       </div>
 
-      {/* ── Overlays ── */}
-      {detail  && (
+      {/* Overlays */}
+      {detail && (
         <DetailView
           task={detail}
           onClose={() => setDetail(null)}
@@ -317,8 +371,8 @@ function TaskListPage({ tasks, onTasksChange }) {
       {editing && (
         <TaskPanel task={editing} onSave={handleSave} onClose={() => setEditing(null)} />
       )}
-      {addNew  && (
-        <TaskPanel task={null}    onSave={handleSave} onClose={() => setAddNew(false)} />
+      {addNew && (
+        <TaskPanel task={null} onSave={handleSave} onClose={() => setAddNew(false)} />
       )}
     </div>
   )
@@ -330,13 +384,21 @@ function TaskListPage({ tasks, onTasksChange }) {
 
 export default function RootPage() {
   const [page,     setPage]     = useState(0)
-  const [tasks,    setTasks]    = useState(globalTasks)
+  const [tasks,    setTasks]    = useState(() => [...globalTasks])
   const [drag,     setDrag]     = useState(0)
   const [dragging, setDragging] = useState(false)
   const [pageW,    setPageW]    = useState(430)
 
   const startX = useRef(null)
   const startY = useRef(null)
+
+  // Refresh tasks from the shared store on mount and on window focus
+  useEffect(() => {
+    const refresh = () => setTasks([...globalTasks])
+    refresh() // initial sync in case store was mutated before mount
+    window.addEventListener('focus', refresh)
+    return () => window.removeEventListener('focus', refresh)
+  }, [])
 
   // Keep page width in sync with viewport
   useEffect(() => {
@@ -356,6 +418,13 @@ export default function RootPage() {
     return () => window.removeEventListener('keydown', fn)
   }, [])
 
+  const handleTasksChange = useCallback((next) => {
+    setTasks(next)
+    // Write back into the shared store so add-task page and focus refresh stay in sync
+    globalTasks.length = 0
+    next.forEach(t => globalTasks.push(t))
+  }, [])
+
   const onTouchStart = useCallback((e) => {
     startX.current = e.touches[0].clientX
     startY.current = e.touches[0].clientY
@@ -366,9 +435,9 @@ export default function RootPage() {
     if (startX.current === null) return
     const dx = e.touches[0].clientX - startX.current
     const dy = Math.abs(e.touches[0].clientY - startY.current)
-    if (dy > Math.abs(dx) * 1.2) return  // vertical scroll takes priority
-    if (page === 0 && dx > 0) return     // can't swipe right on first page
-    if (page === 1 && dx < 0) return     // can't swipe left on last page
+    if (dy > Math.abs(dx) * 1.2) return
+    if (page === 0 && dx > 0) return
+    if (page === 1 && dx < 0) return
     setDrag(dx)
   }, [page])
 
@@ -388,7 +457,7 @@ export default function RootPage() {
       height: '100vh', overflow: 'hidden',
       position: 'relative', backgroundColor: '#fff', fontFamily: FONT,
     }}>
-      {/* ── Sliding track ── */}
+      {/* Sliding track */}
       <div
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
@@ -402,21 +471,18 @@ export default function RootPage() {
           willChange: 'transform',
         }}
       >
-        {/* Page 1 */}
+        {/* Page 1 — Home */}
         <div style={{ width: '50%', height: '100%', flexShrink: 0, overflow: 'hidden' }}>
-          <HomePage tasks={tasks} />
+          <HomePage tasks={tasks} onTasksChange={handleTasksChange} />
         </div>
 
-        {/* Page 2 */}
+        {/* Page 2 — Task List */}
         <div style={{ width: '50%', height: '100%', flexShrink: 0, overflow: 'hidden' }}>
-          <TaskListPage
-            tasks={tasks}
-            onTasksChange={(next) => { setTasks(next); globalTasks = next }}
-          />
+          <TaskListPage tasks={tasks} onTasksChange={handleTasksChange} />
         </div>
       </div>
 
-      {/* ── Pagination dots (clickable) ── */}
+      {/* Pagination dots */}
       <div style={{
         position: 'fixed', bottom: 28,
         left: '50%', transform: 'translateX(-50%)',

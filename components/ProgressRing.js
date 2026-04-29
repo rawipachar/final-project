@@ -7,10 +7,11 @@ import { RED } from '@/lib/constants'
  * SVG circular progress indicator.
  *
  * Props:
- *   percent  – 0-100
- *   size     – diameter in px (default 56)
+ *   percent – 0-100
+ *   size    – diameter in px (default 56)
+ *   color   – ring stroke color (default RED)
  */
-export default function ProgressRing({ percent, size = 56 }) {
+export default function ProgressRing({ percent, size = 56, color = RED }) {
   const stroke = 5
   const r      = (size - stroke) / 2
   const circ   = 2 * Math.PI * r
@@ -31,7 +32,7 @@ export default function ProgressRing({ percent, size = 56 }) {
       <circle
         cx={size / 2} cy={size / 2} r={r}
         fill="none"
-        stroke={RED}
+        stroke={color}
         strokeWidth={stroke}
         strokeLinecap="round"
         strokeDasharray={circ}

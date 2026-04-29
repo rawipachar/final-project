@@ -45,7 +45,12 @@ export default function CountdownCircle({ dueDate, totalDuration }) {
   }, [dueDate, totalDuration])
 
   const dashOffset = circumference * (1 - progress)
-  const ringColor = '#CF0A00'
+  const ringColor  = '#CF0A00'
+  const SF         = '"SF Pro Display", -apple-system, sans-serif'
+
+  const hrs     = Math.floor(remaining / 60)
+  const mins    = remaining % 60
+  const showHrs = remaining >= 60
 
   return (
     <div className="flex items-center justify-center my-4">
@@ -59,23 +64,10 @@ export default function CountdownCircle({ dueDate, totalDuration }) {
           height={size}
           style={{ position: 'absolute', top: 0, left: 0, transform: 'rotate(-90deg)' }}
         >
-          {/* Background track */}
+          <circle cx={size/2} cy={size/2} r={radius} fill="none" stroke="#F0E8E8" strokeWidth={strokeWidth} />
           <circle
-            cx={size / 2}
-            cy={size / 2}
-            r={radius}
-            fill="none"
-            stroke="#F0E8E8"
-            strokeWidth={strokeWidth}
-          />
-          {/* Progress arc */}
-          <circle
-            cx={size / 2}
-            cy={size / 2}
-            r={radius}
-            fill="none"
-            stroke={ringColor}
-            strokeWidth={strokeWidth}
+            cx={size/2} cy={size/2} r={radius} fill="none"
+            stroke={ringColor} strokeWidth={strokeWidth}
             strokeLinecap="round"
             strokeDasharray={circumference}
             strokeDashoffset={dashOffset}
@@ -89,57 +81,44 @@ export default function CountdownCircle({ dueDate, totalDuration }) {
           style={{
             width: size - strokeWidth * 2 - 8,
             height: size - strokeWidth * 2 - 8,
-            boxShadow: '0 2px 20px rgba(207, 10, 0, 0.08)',
+            boxShadow: '0 2px 20px rgba(207,10,0,0.08)',
           }}
         >
           {isDone ? (
-            <div className="flex flex-col items-center gap-1">
-              <span
-                style={{
-                  fontSize: '28px',
-                  fontWeight: '700',
-                  color: '#CF0A00',
-                  fontFamily: '"SF Pro Display", -apple-system, sans-serif',
-                }}
-              >
-                Time&apos;s up
-              </span>
-            </div>
+            <span style={{ fontSize: 28, fontWeight: 700, color: '#CF0A00', fontFamily: SF }}>
+              Time&apos;s up
+            </span>
           ) : (
-            <div className="flex flex-col items-center" style={{ gap: '2px' }}>
-              <span
-                style={{
-                  fontSize: '13px',
-                  fontWeight: '400',
-                  color: '#888',
-                  fontFamily: '"SF Pro Display", -apple-system, sans-serif',
-                  letterSpacing: '0.01em',
-                }}
-              >
+            <div className="flex flex-col items-center" style={{ gap: 2 }}>
+              <span style={{ fontSize: 13, fontWeight: 400, color: '#888', fontFamily: SF, letterSpacing: '0.01em' }}>
                 work is due in
               </span>
-              <span
-                style={{
-                  fontSize: '52px',
-                  fontWeight: '700',
-                  color: '#1a1a1a',
-                  lineHeight: '1',
-                  fontFamily: '"SF Pro Display", -apple-system, sans-serif',
-                  fontVariantNumeric: 'tabular-nums',
-                }}
-              >
-                {remaining}
-              </span>
-              <span
-                style={{
-                  fontSize: '13px',
-                  fontWeight: '400',
-                  color: '#888',
-                  fontFamily: '"SF Pro Display", -apple-system, sans-serif',
-                }}
-              >
-                minutes
-              </span>
+
+              {showHrs ? (
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                  <span style={{ fontSize: 52, fontWeight: 700, color: '#1a1a1a', lineHeight: 1, fontFamily: SF, fontVariantNumeric: 'tabular-nums' }}>
+                    {hrs}
+                  </span>
+                  <span style={{ fontSize: 18, fontWeight: 600, color: '#888', fontFamily: SF }}>h</span>
+                  {mins > 0 && (
+                    <>
+                      <span style={{ fontSize: 32, fontWeight: 700, color: '#1a1a1a', lineHeight: 1, fontFamily: SF, fontVariantNumeric: 'tabular-nums' }}>
+                        {mins}
+                      </span>
+                      <span style={{ fontSize: 18, fontWeight: 600, color: '#888', fontFamily: SF }}>m</span>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <>
+                  <span style={{ fontSize: 52, fontWeight: 700, color: '#1a1a1a', lineHeight: 1, fontFamily: SF, fontVariantNumeric: 'tabular-nums' }}>
+                    {remaining}
+                  </span>
+                  <span style={{ fontSize: 13, fontWeight: 400, color: '#888', fontFamily: SF }}>
+                    minutes
+                  </span>
+                </>
+              )}
             </div>
           )}
         </div>

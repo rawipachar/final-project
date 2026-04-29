@@ -1,33 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Calendar from '@/components/Calendar'
 import { FONT, RED, LIGHT_BLUE, GRAY } from '@/lib/constants'
-
-// ─── task store (module-level, persists across nav) ───────────────────────
-let taskStore = [
-  {
-    id: 1,
-    title: 'Final Prototype',
-    deadline: (() => { const d = new Date(); d.setMinutes(d.getMinutes() + 120); return d.toISOString() })(),
-    priority: 'high', duration: 90, description: '', emoji: '🧶', subtasks: [],
-  },
-  {
-    id: 2,
-    title: 'Draft 2',
-    deadline: (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString() })(),
-    priority: 'medium', duration: 80, description: '', emoji: '🧶', subtasks: [],
-  },
-  {
-    id: 3,
-    title: 'Draft 6',
-    deadline: (() => { const d = new Date(); d.setDate(d.getDate() + 2); return d.toISOString() })(),
-    priority: 'low', duration: 20, description: '', emoji: '✏️', subtasks: [],
-  },
-]
-let nextId = 10
-let nextSubId = 1
+import { globalTasks, addTaskToStore, getNextId } from '@/lib/taskStore'
 
 // ─── helpers ──────────────────────────────────────────────────────────────
 function todayStr() {
@@ -39,8 +16,6 @@ function fmtHrs(h) {
   if (!h && h !== 0) return '—'
   return h === 1 ? '1 hr' : `${h} hrs`
 }
-
-const PRIORITY_COLOR = { high: RED, medium: '#E8781A', low: '#D4A017' }
 
 // ─── design tokens ────────────────────────────────────────────────────────
 const inp = {
@@ -69,33 +44,30 @@ function Card({ children, style }) {
   return (
     <div style={{
       backgroundColor: '#fff', borderRadius: 16,
-      padding: '14px 16px', ...style,
+      padding: '14px 16px', boxSizing: 'border-box', ...style,
     }}>
       {children}
     </div>
   )
 }
 
-// ─── SubtaskEditor ────────────────────────────────────────────────────────
-// Mirrors the SubtaskRow visual from DetailView but is editable
-function SubtaskEditorRow({ subtask, onChange, onRemove, index }) {
+// ─── SubtaskEditorRow ─────────────────────────────────────────────────────
+function SubtaskEditorRow({ subtask, onChange, onRemove }) {
   return (
     <div style={{
       backgroundColor: '#fff', borderRadius: 16,
       padding: '14px 16px', marginBottom: 10,
       boxShadow: '0 1px 6px rgba(0,0,0,0.06)',
+      boxSizing: 'border-box',
     }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-        {/* Circle — matches DetailView style */}
         <div style={{
           width: 28, height: 28, borderRadius: '50%',
           backgroundColor: '#E0E0E0', flexShrink: 0, marginTop: 2,
         }} />
 
         <div style={{ flex: 1, minWidth: 0 }}>
-          {/* Title + duration row */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            {/* Subtask name input */}
             <input
               type="text"
               placeholder="Subtask name"
@@ -107,7 +79,6 @@ function SubtaskEditorRow({ subtask, onChange, onRemove, index }) {
                 borderBottom: '1px solid #F0F0F0', paddingBottom: 2,
               }}
             />
-            {/* Duration hours */}
             <div style={{
               display: 'flex', alignItems: 'center', gap: 4,
               backgroundColor: GRAY, borderRadius: 8, padding: '4px 10px', flexShrink: 0,
@@ -131,7 +102,6 @@ function SubtaskEditorRow({ subtask, onChange, onRemove, index }) {
             </div>
           </div>
 
-          {/* Description input */}
           <input
             type="text"
             placeholder="Brief description…"
@@ -143,7 +113,6 @@ function SubtaskEditorRow({ subtask, onChange, onRemove, index }) {
             }}
           />
 
-          {/* Progress track preview — matches DetailView exactly */}
           <div style={{ position: 'relative', height: 6, backgroundColor: '#DDD', borderRadius: 999, overflow: 'visible' }}>
             <div style={{
               position: 'absolute', top: '50%',
@@ -156,7 +125,6 @@ function SubtaskEditorRow({ subtask, onChange, onRemove, index }) {
           </div>
         </div>
 
-        {/* Remove button */}
         <button
           onClick={() => onRemove(subtask.id)}
           style={{
@@ -165,8 +133,8 @@ function SubtaskEditorRow({ subtask, onChange, onRemove, index }) {
             padding: '2px 4px', flexShrink: 0, marginTop: -2,
             transition: 'color 0.15s',
           }}
-          onMouseEnter={e => e.currentTarget.style.color = RED}
-          onMouseLeave={e => e.currentTarget.style.color = '#CCC'}
+          onMouseEnter={e => (e.currentTarget.style.color = RED)}
+          onMouseLeave={e => (e.currentTarget.style.color = '#CCC')}
           title="Remove subtask"
         >
           ×
@@ -179,25 +147,25 @@ function SubtaskEditorRow({ subtask, onChange, onRemove, index }) {
 // ─── AddTaskPage ──────────────────────────────────────────────────────────
 export default function AddTaskPage() {
   const router = useRouter()
-  const [tasks, setTasks] = useState(taskStore)
+
+  const [tasks,        setTasks]        = useState([...globalTasks])
   const [selectedDate, setSelectedDate] = useState(todayStr())
-  const [submitted, setSubmitted] = useState(false)
-  const [shake, setShake] = useState(false)
+  const [submitted,    setSubmitted]    = useState(false)
+  const [shake,        setShake]        = useState(false)
+  const [subtasks,     setSubtasks]     = useState([])
+  const nextSubIdRef = useRef(1)
 
   const [form, setForm] = useState({
-    title: '',
-    deadline: todayStr(),
+    title:        '',
+    deadline:     todayStr(),
     deadlineTime: '09:00',
-    priority: 'high',
-    hours: '0',
-    minutes: '00',
-    description: '',
-    emoji: '🧶',
+    priority:     'high',
+    hours:        '0',
+    minutes:      '00',
+    description:  '',
+    emoji:        '🧶',
   })
 
-  const [subtasks, setSubtasks] = useState([])
-
-  // ── form helpers ──
   const set = (field) => (e) => setForm(f => ({ ...f, [field]: e.target.value }))
 
   const handleDateSelect = (dateStr) => {
@@ -205,10 +173,9 @@ export default function AddTaskPage() {
     setForm(f => ({ ...f, deadline: dateStr }))
   }
 
-  // ── subtask CRUD ──
   const addSubtask = () => {
     setSubtasks(prev => [...prev, {
-      id: nextSubId++,
+      id: nextSubIdRef.current++,
       title: '',
       description: '',
       hours: 1,
@@ -224,16 +191,11 @@ export default function AddTaskPage() {
     setSubtasks(prev => prev.filter(s => s.id !== id))
   }
 
-  // ── total computed hours ──
   const subtaskTotalHrs = subtasks.reduce((sum, s) => sum + (parseInt(s.hours) || 0), 0)
-  const formHrs = parseInt(form.hours || 0)
-  const formMins = parseInt(form.minutes || 0)
-  // If subtasks exist, total = subtask sum. Otherwise form time.
-  const totalDuration = subtasks.length > 0
+  const totalDuration   = subtasks.length > 0
     ? subtaskTotalHrs * 60
-    : formHrs * 60 + formMins
+    : parseInt(form.hours || 0) * 60 + parseInt(form.minutes || 0)
 
-  // ── submit ──
   const handleSubmit = () => {
     if (!form.title.trim()) {
       setShake(true)
@@ -244,39 +206,36 @@ export default function AddTaskPage() {
     const deadlineISO = `${form.deadline}T${form.deadlineTime}:00`
 
     const normalizedSubtasks = subtasks.map((s, i) => ({
-      id: i + 1,
-      title: s.title || `Step ${i + 1}`,
+      id:          i + 1,
+      title:       s.title || `Step ${i + 1}`,
       description: s.description || '',
-      duration: parseInt(s.hours) || 1,
-      completed: false,
+      duration:    parseInt(s.hours) || 1,
+      completed:   false,
     }))
 
     const newTask = {
-      id: nextId++,
-      title: form.title.trim(),
-      deadline: deadlineISO,
-      priority: form.priority,
-      duration: totalDuration,
+      id:          getNextId(),
+      title:       form.title.trim(),
+      deadline:    deadlineISO,
+      priority:    form.priority,
+      duration:    totalDuration,
       description: form.description,
-      emoji: form.emoji,
-      subtasks: normalizedSubtasks,
+      emoji:       form.emoji,
+      subtasks:    normalizedSubtasks,
     }
 
-    taskStore = [newTask, ...taskStore]
-    setTasks([...taskStore])
+    // Push into the shared module-level store
+    addTaskToStore(newTask)
+    setTasks([...globalTasks])
     setSubmitted(true)
 
+    // Navigate back after 1.2 s so the user sees the success state
     setTimeout(() => {
-      setForm({
-        title: '', deadline: selectedDate, deadlineTime: '09:00',
-        priority: 'high', hours: '0', minutes: '00', description: '', emoji: '🧶',
-      })
-      setSubtasks([])
-      setSubmitted(false)
-    }, 1600)
+      router.back()
+    }, 1200)
   }
 
-  const priorityColor = PRIORITY_COLOR[form.priority] || RED
+  const priorityColor = { high: RED, medium: '#CC4139', low: '#D06761' }[form.priority] || RED
 
   return (
     <div style={{
@@ -285,6 +244,8 @@ export default function AddTaskPage() {
       fontFamily: FONT,
       maxWidth: 430,
       margin: '0 auto',
+      overflowX: 'hidden',
+      boxSizing: 'border-box',
     }}>
 
       <style>{`
@@ -301,14 +262,16 @@ export default function AddTaskPage() {
         }
         input[type=number]::-webkit-inner-spin-button,
         input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; }
-        input[type=date]::-webkit-calendar-picker-indicator { opacity: 0.5; cursor: pointer; }
+        input[type=date]::-webkit-calendar-picker-indicator,
+        input[type=time]::-webkit-calendar-picker-indicator { opacity: 0.5; cursor: pointer; }
       `}</style>
 
-      {/* ── Header ───────────────────────────────────────────── */}
+      {/* Header */}
       <div style={{
         display: 'flex', alignItems: 'center',
         justifyContent: 'space-between',
         padding: '52px 24px 16px',
+        boxSizing: 'border-box',
       }}>
         <button
           onClick={() => router.back()}
@@ -327,17 +290,18 @@ export default function AddTaskPage() {
         <div style={{ width: 60 }} />
       </div>
 
-      {/* ── Calendar ─────────────────────────────────────────── */}
-      <div style={{ padding: '0 20px 8px' }}>
+      {/* Calendar */}
+      <div style={{ padding: '0 20px 8px', boxSizing: 'border-box' }}>
         <Calendar tasks={tasks} selectedDate={selectedDate} onDateSelect={handleDateSelect} />
       </div>
 
-      {/* ── Form card ────────────────────────────────────────── */}
+      {/* Form card */}
       <div style={{
         backgroundColor: LIGHT_BLUE,
         borderRadius: '28px 28px 0 0',
         padding: '28px 20px 48px',
         marginTop: 8,
+        boxSizing: 'border-box',
       }}>
 
         {/* Task name */}
@@ -348,7 +312,6 @@ export default function AddTaskPage() {
             outline: shake ? `2px solid ${RED}` : 'none',
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              {/* Emoji picker */}
               <button
                 onClick={() => {
                   const emojis = ['🧶', '📝', '✏️', '🎨', '📐', '🔧', '📊', '🗂️', '💡', '🚀']
@@ -376,17 +339,28 @@ export default function AddTaskPage() {
           </Card>
         </div>
 
-        {/* Deadline + Priority */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 18 }}>
+        {/* Deadline + Due Time + Priority */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 18 }}>
           <div>
-            <SectionLabel>Deadline</SectionLabel>
+            <SectionLabel>Date</SectionLabel>
             <Card>
               <input
                 type="date"
                 value={form.deadline}
                 min={todayStr()}
                 onChange={(e) => { set('deadline')(e); setSelectedDate(e.target.value) }}
-                style={{ ...inp, fontSize: 13 }}
+                style={{ ...inp, fontSize: 12 }}
+              />
+            </Card>
+          </div>
+          <div>
+            <SectionLabel>Time</SectionLabel>
+            <Card>
+              <input
+                type="time"
+                value={form.deadlineTime}
+                onChange={set('deadlineTime')}
+                style={{ ...inp, fontSize: 12 }}
               />
             </Card>
           </div>
@@ -398,7 +372,7 @@ export default function AddTaskPage() {
                 onChange={set('priority')}
                 style={{
                   ...inp, appearance: 'none', WebkitAppearance: 'none',
-                  cursor: 'pointer', fontWeight: 700, color: priorityColor,
+                  cursor: 'pointer', fontWeight: 700, fontSize: 13, color: priorityColor,
                 }}
               >
                 <option value="high">high</option>
@@ -409,7 +383,7 @@ export default function AddTaskPage() {
           </div>
         </div>
 
-        {/* Estimated work time — hidden if subtasks cover it */}
+        {/* Estimated work time */}
         {subtasks.length === 0 && (
           <div style={{ marginBottom: 18 }}>
             <SectionLabel>Estimated Work Time</SectionLabel>
@@ -433,11 +407,10 @@ export default function AddTaskPage() {
           </div>
         )}
 
-        {/* ── Description + Subtask section ────────────────── */}
+        {/* Description + Subtasks */}
         <div style={{ marginBottom: 22 }}>
           <SectionLabel>Description & Subtasks</SectionLabel>
 
-          {/* Description textarea */}
           <Card style={{ marginBottom: 10 }}>
             <textarea
               placeholder="Describe what needs to be done…"
@@ -448,14 +421,12 @@ export default function AddTaskPage() {
             />
           </Card>
 
-          {/* Subtask list — mirrors DetailView visual exactly */}
           {subtasks.length > 0 && (
             <div style={{ animation: 'subtaskIn 0.2s ease' }}>
-              {subtasks.map((s, i) => (
+              {subtasks.map((s) => (
                 <SubtaskEditorRow
                   key={s.id}
                   subtask={s}
-                  index={i}
                   onChange={updateSubtask}
                   onRemove={removeSubtask}
                 />
@@ -463,24 +434,15 @@ export default function AddTaskPage() {
             </div>
           )}
 
-          {/* ── Add Subtask button ── */}
           <button
             onClick={addSubtask}
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 8,
-              width: '100%',
-              padding: '12px 0',
-              borderRadius: 14,
-              border: `2px dashed rgba(207,10,0,0.25)`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              width: '100%', padding: '12px 0',
+              borderRadius: 14, border: `2px dashed rgba(207,10,0,0.25)`,
               backgroundColor: 'rgba(207,10,0,0.04)',
-              cursor: 'pointer',
-              color: RED,
-              fontFamily: FONT,
-              fontSize: 14,
-              fontWeight: 600,
+              cursor: 'pointer', color: RED,
+              fontFamily: FONT, fontSize: 14, fontWeight: 600,
               transition: 'all 0.2s',
             }}
             onMouseEnter={e => {
@@ -492,7 +454,6 @@ export default function AddTaskPage() {
               e.currentTarget.style.borderColor = 'rgba(207,10,0,0.25)'
             }}
           >
-            {/* Plus-in-circle icon */}
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
               <circle cx="10" cy="10" r="9" stroke={RED} strokeWidth="1.5"/>
               <path d="M10 6V14M6 10H14" stroke={RED} strokeWidth="1.8" strokeLinecap="round"/>
@@ -500,53 +461,40 @@ export default function AddTaskPage() {
             Add subtask
           </button>
 
-          {/* Summary chip — shows when subtasks exist */}
           {subtasks.length > 0 && (
             <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              marginTop: 12,
-              padding: '10px 14px',
-              backgroundColor: 'rgba(207,10,0,0.06)',
-              borderRadius: 12,
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              marginTop: 12, padding: '10px 14px',
+              backgroundColor: 'rgba(207,10,0,0.06)', borderRadius: 12,
             }}>
               <span style={{ fontSize: 13, color: '#888', fontWeight: 500 }}>
                 {subtasks.length} subtask{subtasks.length !== 1 ? 's' : ''}
               </span>
-              <span style={{
-                fontSize: 14, fontWeight: 700, color: RED,
-              }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: RED }}>
                 {fmtHrs(subtaskTotalHrs)} total
               </span>
             </div>
           )}
         </div>
 
-        {/* ── Submit ────────────────────────────────────────── */}
+        {/* Submit */}
         <button
           onClick={handleSubmit}
           style={{
-            width: '100%',
-            padding: 18,
+            width: '100%', padding: 18,
             backgroundColor: submitted ? '#3A9E3A' : RED,
-            color: '#fff',
-            border: 'none',
-            borderRadius: 999,
-            fontSize: 17,
-            fontWeight: 700,
-            fontFamily: FONT,
-            cursor: 'pointer',
-            letterSpacing: '0.01em',
+            color: '#fff', border: 'none',
+            borderRadius: 999, fontSize: 17, fontWeight: 700,
+            fontFamily: FONT, cursor: 'pointer', letterSpacing: '0.01em',
             boxShadow: submitted
               ? '0 8px 24px rgba(58,158,58,0.3)'
               : '0 8px 24px rgba(207,10,0,0.28)',
             transition: 'background-color 0.3s, box-shadow 0.3s, transform 0.15s',
           }}
           onMouseDown={e => (e.currentTarget.style.transform = 'scale(0.97)')}
-          onMouseUp={e => (e.currentTarget.style.transform = 'scale(1)')}
+          onMouseUp={e   => (e.currentTarget.style.transform = 'scale(1)')}
           onTouchStart={e => (e.currentTarget.style.transform = 'scale(0.97)')}
-          onTouchEnd={e => (e.currentTarget.style.transform = 'scale(1)')}
+          onTouchEnd={e   => (e.currentTarget.style.transform = 'scale(1)')}
         >
           {submitted ? '✓ Task added!' : "Let's get to work"}
         </button>
