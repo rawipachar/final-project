@@ -11,7 +11,7 @@ import TaskListCard      from '@/components/TaskListCard'
 import DetailView        from '@/components/DetailView'
 import TaskPanel         from '@/components/TaskPanel'
 
-import { FONT, RED, LIGHT_BLUE, GRAY, MONTH_NAMES, PRIORITY_WEIGHT } from '@/lib/constants'
+import { FONT, RED, GRAY, MONTH_NAMES, PRIORITY_WEIGHT } from '@/lib/constants'
 import { todayMidnight, dateLabel, formatDuration, makeDueDate }      from '@/lib/utils'
 import { globalTasks, getNextId }                                      from '@/lib/taskStore'
 
@@ -199,7 +199,6 @@ function TaskListPage({ tasks, onTasksChange }) {
   const [expanded, setExpanded] = useState(null)
   const [detail,   setDetail]   = useState(null)
   const [editing,  setEditing]  = useState(null)
-  const [addNew,   setAddNew]   = useState(false)
 
   const handleCardTap = (task) => {
     if (expanded === task.id) setDetail(task)
@@ -207,12 +206,9 @@ function TaskListPage({ tasks, onTasksChange }) {
   }
 
   const handleSave = (updated) => {
-    const next = updated.id
-      ? tasks.map(t => t.id === updated.id ? updated : t)
-      : [{ ...updated, id: getNextId() }, ...tasks]
+    const next = tasks.map(t => t.id === updated.id ? updated : t)
     onTasksChange(next)
     setEditing(null)
-    setAddNew(false)
     if (detail?.id === updated.id) setDetail(updated)
   }
 
@@ -295,19 +291,9 @@ function TaskListPage({ tasks, onTasksChange }) {
       {/* Header */}
       <div style={{
         padding: '52px 24px 16px',
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         boxSizing: 'border-box',
       }}>
         <h1 style={{ fontSize: 28, fontWeight: 800, color: '#1a1a1a', margin: 0 }}>Task</h1>
-        <button
-          onClick={() => setAddNew(true)}
-          style={{
-            width: 38, height: 38, borderRadius: '50%',
-            backgroundColor: LIGHT_BLUE, border: 'none', cursor: 'pointer',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 22, color: '#1a1a1a',
-          }}
-        >+</button>
       </div>
 
       {/* Filter pills */}
@@ -370,9 +356,6 @@ function TaskListPage({ tasks, onTasksChange }) {
       )}
       {editing && (
         <TaskPanel task={editing} onSave={handleSave} onClose={() => setEditing(null)} />
-      )}
-      {addNew && (
-        <TaskPanel task={null} onSave={handleSave} onClose={() => setAddNew(false)} />
       )}
     </div>
   )
