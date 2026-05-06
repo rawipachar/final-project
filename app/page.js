@@ -10,6 +10,7 @@ import HomeCard          from '@/components/HomeCard'
 import TaskListCard      from '@/components/TaskListCard'
 import DetailView        from '@/components/DetailView'
 import TaskPanel         from '@/components/TaskPanel'
+import Calendar          from '@/components/Calendar'
 
 import { FONT, RED, GRAY, MONTH_NAMES, PRIORITY_WEIGHT } from '@/lib/constants'
 import { todayMidnight, dateLabel, formatDuration, makeDueDate }      from '@/lib/utils'
@@ -362,7 +363,125 @@ function TaskListPage({ tasks, onTasksChange }) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// ROOT — two-page swipeable shell
+// PAGE 3 — CALENDAR VIEW
+// ═══════════════════════════════════════════════════════════════
+
+function CalendarViewPage({ tasks, onTasksChange }) {
+  const router  = useRouter()
+  const today   = new Date()
+  const todayISO = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+
+  const [selectedDate, setSelectedDate] = useState(todayISO)
+  const [expanded,     setExpanded]     = useState(null)
+  const [editing,      setEditing]      = useState(null)
+
+  // Parse selected date components (avoids UTC timezone drift from date-only strings)
+  const [selY, selM, selD] = selectedDate.split('-').map(Number)
+
+  // Filter tasks whose deadline falls on the selected date
+  const tasksForDate = tasks.filter(t => {
+    if (!t.deadline) return false
+    const d = new Date(t.deadline)
+    return d.getFullYear() === selY && d.getMonth() === selM - 1 && d.getDate() === selD
+  })
+
+  // Section heading: "Today" / "Tomorrow" / "21 April"
+  const getSectionLabel = () => {
+    const sel      = new Date(selY, selM - 1, selD)
+    const todayMid = new Date(); todayMid.setHours(0, 0, 0, 0)
+    const diff     = Math.round((sel - todayMid) / 86400000)
+    if (diff === 0) return 'Today'
+    if (diff === 1) return 'Tomorrow'
+    return `${selD} ${MONTH_NAMES[selM - 1]}`
+  }
+
+  const handleSave = (updated) => {
+    const next = tasks.map(t => t.id === updated.id ? updated : t)
+    onTasksChange(next)
+    setEditing(null)
+  }
+
+  return (
+    <div style={{
+      fontFamily: FONT,
+      height: '100%',
+      overflowY: 'auto',
+      overflowX: 'hidden',
+      paddingBottom: 120,
+      boxSizing: 'border-box',
+    }}>
+      {/* Header */}
+      <div style={{ padding: '52px 24px 16px', boxSizing: 'border-box' }}>
+        <h1 style={{ fontSize: 28, fontWeight: 800, color: '#1a1a1a', margin: 0 }}>Calendar</h1>
+      </div>
+
+      {/* Calendar */}
+      <div style={{ padding: '0 24px', boxSizing: 'border-box' }}>
+        <Calendar
+          tasks={tasks}
+          selectedDate={selectedDate}
+          onDateSelect={setSelectedDate}
+          allowPast
+        />
+      </div>
+
+      {/* Divider */}
+      <div style={{ height: 1, backgroundColor: '#F0F0F0', margin: '20px 24px' }} />
+
+      {/* Task list for selected date */}
+      <div style={{ padding: '0 20px', boxSizing: 'border-box' }}>
+        <h2 style={{ fontSize: 24, fontWeight: 700, color: '#1a1a1a', margin: '0 0 14px 2px' }}>
+          {getSectionLabel()}
+        </h2>
+
+        {tasksForDate.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '32px 0' }}>
+            <div style={{ fontSize: 40, marginBottom: 8 }}>📅</div>
+            <p style={{ fontSize: 15, margin: '0 0 6px', fontWeight: 500, color: '#bbb' }}>
+              No tasks for this day
+            </p>
+            <button
+              onClick={() => router.push('/add-task')}
+              style={{
+                marginTop: 12,
+                padding: '9px 22px',
+                borderRadius: 999,
+                border: 'none',
+                backgroundColor: RED,
+                color: '#fff',
+                fontSize: 14,
+                fontWeight: 700,
+                fontFamily: FONT,
+                cursor: 'pointer',
+              }}
+            >
+              + Add task
+            </button>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {tasksForDate.map(task => (
+              <TaskListCard
+                key={task.id}
+                task={task}
+                isExpanded={expanded === task.id}
+                onToggle={() => setExpanded(prev => prev === task.id ? null : task.id)}
+                onEdit={(t) => { setExpanded(null); setEditing(t) }}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {editing && (
+        <TaskPanel task={editing} onSave={handleSave} onClose={() => setEditing(null)} />
+      )}
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ROOT — three-page swipeable shell
 // ═══════════════════════════════════════════════════════════════
 
 export default function RootPage() {
@@ -394,8 +513,8 @@ export default function RootPage() {
   // Arrow-key navigation for desktop testing
   useEffect(() => {
     const fn = (e) => {
-      if (e.key === 'ArrowLeft')  setPage(0)
-      if (e.key === 'ArrowRight') setPage(1)
+      if (e.key === 'ArrowLeft')  setPage(p => Math.max(0, p - 1))
+      if (e.key === 'ArrowRight') setPage(p => Math.min(2, p + 1))
     }
     window.addEventListener('keydown', fn)
     return () => window.removeEventListener('keydown', fn)
@@ -419,14 +538,14 @@ export default function RootPage() {
     const dx = e.touches[0].clientX - startX.current
     const dy = Math.abs(e.touches[0].clientY - startY.current)
     if (dy > Math.abs(dx) * 1.2) return
-    if (page === 0 && dx > 0) return
-    if (page === 1 && dx < 0) return
+    if (page === 0 && dx > 0) return   // no right swipe from first page
+    if (page === 2 && dx < 0) return   // no left swipe from last page
     setDrag(dx)
   }, [page])
 
   const onTouchEnd = useCallback(() => {
-    if (drag < -55 && page === 0) setPage(1)
-    else if (drag > 55 && page === 1) setPage(0)
+    if (drag < -55 && page < 2) setPage(page + 1)
+    else if (drag > 55 && page > 0) setPage(page - 1)
     setDrag(0)
     setDragging(false)
     startX.current = null
@@ -447,7 +566,7 @@ export default function RootPage() {
         onTouchEnd={onTouchEnd}
         style={{
           display: 'flex',
-          width: '200%',
+          width: '300%',
           height: '100%',
           transform: `translateX(${translateX}px)`,
           transition: dragging ? 'none' : 'transform 0.36s cubic-bezier(0.4,0,0.2,1)',
@@ -455,13 +574,18 @@ export default function RootPage() {
         }}
       >
         {/* Page 1 — Home */}
-        <div style={{ width: '50%', height: '100%', flexShrink: 0, overflow: 'hidden' }}>
+        <div style={{ width: '33.333%', height: '100%', flexShrink: 0, overflow: 'hidden' }}>
           <HomePage tasks={tasks} onTasksChange={handleTasksChange} />
         </div>
 
         {/* Page 2 — Task List */}
-        <div style={{ width: '50%', height: '100%', flexShrink: 0, overflow: 'hidden' }}>
+        <div style={{ width: '33.333%', height: '100%', flexShrink: 0, overflow: 'hidden' }}>
           <TaskListPage tasks={tasks} onTasksChange={handleTasksChange} />
+        </div>
+
+        {/* Page 3 — Calendar View */}
+        <div style={{ width: '33.333%', height: '100%', flexShrink: 0, overflow: 'hidden' }}>
+          <CalendarViewPage tasks={tasks} onTasksChange={handleTasksChange} />
         </div>
       </div>
 
@@ -471,7 +595,7 @@ export default function RootPage() {
         left: '50%', transform: 'translateX(-50%)',
         display: 'flex', gap: 8, alignItems: 'center', zIndex: 100,
       }}>
-        {[0, 1].map(i => (
+        {[0, 1, 2].map(i => (
           <div
             key={i}
             onClick={() => setPage(i)}

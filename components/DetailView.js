@@ -19,18 +19,21 @@ function calcProgress(subtasks) {
   return { percent, remaining, total }
 }
 
-function fmtHrs(h) {
-  if (!h && h !== 0) return '—'
-  return h === 1 ? '1 hr' : `${h} hrs`
+function fmtDuration(mins) {
+  if (!mins && mins !== 0) return '—'
+  if (mins < 60) return `${mins} min`
+  const h = Math.floor(mins / 60)
+  const m = mins % 60
+  return m ? `${h}h ${m}m` : `${h} hr`
 }
 
 function buildFallbackSubtasks(taskDuration) {
-  const totalH = Math.max(1, Math.round((taskDuration || 60) / 60))
+  const total = Math.max(20, taskDuration || 60)
   return [
-    { id: 1, title: 'Planning',  description: 'Define scope and requirements', duration: Math.max(1, Math.round(totalH * 0.15)), completed: false },
-    { id: 2, title: 'Execution', description: 'Core implementation work',      duration: Math.max(1, Math.round(totalH * 0.50)), completed: false },
-    { id: 3, title: 'Review',    description: 'Quality check and refinements', duration: Math.max(1, Math.round(totalH * 0.25)), completed: false },
-    { id: 4, title: 'Delivery',  description: 'Final delivery and handoff',    duration: Math.max(1, Math.round(totalH * 0.10)), completed: false },
+    { id: 1, title: 'Planning',  description: 'Define scope and requirements', duration: Math.max(5, Math.round(total * 0.15)), completed: false },
+    { id: 2, title: 'Execution', description: 'Core implementation work',      duration: Math.max(5, Math.round(total * 0.50)), completed: false },
+    { id: 3, title: 'Review',    description: 'Quality check and refinements', duration: Math.max(5, Math.round(total * 0.25)), completed: false },
+    { id: 4, title: 'Delivery',  description: 'Final delivery and handoff',    duration: Math.max(5, Math.round(total * 0.10)), completed: false },
   ]
 }
 
@@ -84,6 +87,10 @@ export default function DetailView({ task, onClose, onEdit }) {
         ? { ...s, progress: newProgress, completed: newProgress === 100 }
         : s
     ))
+  }
+
+  const handleSubtaskEdit = (subtaskId, updates) => {
+    setSubtasks(prev => prev.map(s => s.id === subtaskId ? { ...s, ...updates } : s))
   }
 
   const handleDone = () => {
@@ -206,7 +213,7 @@ export default function DetailView({ task, onClose, onEdit }) {
                     <path d="M8 4.5V8L10.5 10" stroke="#888" strokeWidth="1.5" strokeLinecap="round"/>
                   </svg>
                   <span style={{ fontSize: 13, color: '#777', fontWeight: 500 }}>
-                    {subtasks ? fmtHrs(total) : fmtHrs(Math.round((task.duration || 0) / 60))} work
+                    {fmtDuration(subtasks ? total : (task.duration || 0))} work
                   </span>
                 </div>
               </div>
@@ -261,7 +268,7 @@ export default function DetailView({ task, onClose, onEdit }) {
                     fontVariantNumeric: 'tabular-nums',
                     transition: 'all 0.4s',
                   }}>
-                    {fmtHrs(remaining)}
+                    {fmtDuration(remaining)}
                   </span>
                   <span style={{ fontSize: 22, fontWeight: 700, color: priorityColor }}> Left</span>
                 </div>
@@ -277,6 +284,7 @@ export default function DetailView({ task, onClose, onEdit }) {
                   subtask={s}
                   onToggle={handleToggle}
                   onProgressChange={handleProgressChange}
+                  onEdit={handleSubtaskEdit}
                 />
               ))}
             </div>

@@ -1,10 +1,10 @@
 'use client'
 
 const PRIORITY_COLORS = {
-  high: '#CF0A00',
+  high:    '#CF0A00',
   highest: '#CF0A00',
-  medium: '#CC4139',
-  low: '#D06761',
+  medium:  '#FFAA00',
+  low:     '#0090FF',
 }
 
 export default function TaskDots({ tasks = [] }) {

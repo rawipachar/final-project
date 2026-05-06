@@ -48,7 +48,7 @@ function buildCalendarGrid(year, month) {
   return cells
 }
 
-export default function Calendar({ tasks = [], selectedDate, onDateSelect }) {
+export default function Calendar({ tasks = [], selectedDate, onDateSelect, allowPast = false }) {
   const today = new Date()
   const [viewYear, setViewYear] = useState(today.getFullYear())
   const [viewMonth, setViewMonth] = useState(today.getMonth())
@@ -200,6 +200,7 @@ export default function Calendar({ tasks = [], selectedDate, onDateSelect }) {
                     isWeekend={isWeekend(ci)}
                     isPast={isPast(cell)}
                     tasks={cellTasks}
+                    allowPast={allowPast}
                     onSelect={(d) => {
                       const dateStr = `${cell.year}-${String(cell.month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
                       onDateSelect(dateStr)

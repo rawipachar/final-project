@@ -11,13 +11,14 @@ export default function CalendarDay({
   isPast,
   tasks,
   onSelect,
+  allowPast = false,
 }) {
   if (!day) {
     return <div />
   }
 
   const handleClick = () => {
-    if (!isPast && onSelect) onSelect(day)
+    if ((!isPast || allowPast) && onSelect) onSelect(day)
   }
 
   let textColor = '#1a1a1a'
@@ -31,7 +32,7 @@ export default function CalendarDay({
   return (
     <div
       className="flex flex-col items-center"
-      style={{ cursor: isPast ? 'default' : 'pointer' }}
+      style={{ cursor: isPast && !allowPast ? 'default' : 'pointer' }}
       onClick={handleClick}
     >
       <div
